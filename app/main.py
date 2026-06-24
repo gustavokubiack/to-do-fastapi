@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from http import HTTPStatus
 
 from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi.responses import FileResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,18 +27,23 @@ app = FastAPI(
 )
 
 
-@app.get("/health")
-async def health():
-    return {"status": "healthy", "timestamp": datetime.now(timezone.utc).isoformat()}
+INDEX_HTML = os.path.join(os.path.dirname(__file__), "..", "static", "index.html")
 
 
 @app.get("/")
 async def root():
+    if os.path.isfile(INDEX_HTML):
+        return FileResponse(INDEX_HTML, media_type="text/html")
     return {
         "app": os.environ.get("APP_NAME", "to-do-fastapi"),
         "status": "running",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+
+
+@app.get("/health")
+async def health():
+    return {"status": "healthy", "timestamp": datetime.now(timezone.utc).isoformat()}
 
 
 @app.get("/db-status")

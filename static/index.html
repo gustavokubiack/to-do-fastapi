@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>To-Do List</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f0f2f5; color: #1a1a2e; line-height: 1.6;
+  }
+  .container { max-width: 640px; margin: 0 auto; padding: 2rem 1rem; }
+  h1 { text-align: center; margin-bottom: 1.5rem; font-size: 1.75rem; }
+  .card {
+    background: #fff; border-radius: 12px; padding: 1.5rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,.1); margin-bottom: 1rem;
+  }
+  .todo-form { display: flex; gap: .5rem; }
+  .todo-form input[type="text"] {
+    flex: 1; padding: .625rem .875rem; border: 1px solid #d1d5db;
+    border-radius: 8px; font-size: .9375rem; outline: none;
+  }
+  .todo-form input[type="text"]:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.15); }
+  .todo-form button {
+    padding: .625rem 1.25rem; background: #6366f1; color: #fff;
+    border: none; border-radius: 8px; font-size: .9375rem; cursor: pointer;
+    white-space: nowrap;
+  }
+  .todo-form button:hover { background: #4f46e5; }
+  .todo-list { list-style: none; }
+  .todo-item {
+    display: flex; align-items: center; gap: .75rem;
+    padding: .75rem 0; border-bottom: 1px solid #f0f0f0;
+  }
+  .todo-item:last-child { border-bottom: none; }
+  .todo-item input[type="checkbox"] {
+    width: 1.125rem; height: 1.125rem; cursor: pointer; accent-color: #6366f1;
+  }
+  .todo-item .todo-text { flex: 1; word-break: break-word; }
+  .todo-item .todo-text.done { text-decoration: line-through; color: #9ca3af; }
+  .todo-item .todo-actions { display: flex; gap: .375rem; }
+  .todo-actions button {
+    background: none; border: 1px solid #d1d5db; border-radius: 6px;
+    padding: .25rem .5rem; font-size: .8125rem; cursor: pointer; color: #6b7280;
+  }
+  .todo-actions .edit-btn:hover { border-color: #6366f1; color: #6366f1; }
+  .todo-actions .delete-btn:hover { border-color: #ef4444; color: #ef4444; }
+  .empty-msg { text-align: center; color: #9ca3af; padding: 2rem 0; }
+  .error-toast {
+    position: fixed; bottom: 1rem; left: 50%; transform: translateX(-50%);
+    background: #ef4444; color: #fff; padding: .75rem 1.5rem;
+    border-radius: 8px; font-size: .875rem; box-shadow: 0 4px 12px rgba(0,0,0,.15);
+    display: none;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>To-Do List</h1>
+  <div class="card">
+    <form class="todo-form" id="todoForm">
+      <input type="text" id="todoInput" placeholder="Nova tarefa..." required autofocus>
+      <button type="submit">Adicionar</button>
+    </form>
+  </div>
+  <div class="card">
+    <ul class="todo-list" id="todoList"></ul>
+  </div>
+</div>
+<div class="error-toast" id="errorToast"></div>
+
+<script>
+const API = window.location.origin;
+const list = document.getElementById("todoList");
+const form = document.getElementById("todoForm");
+const input = document.getElementById("todoInput");
+const toast = document.getElementById("errorToast");
+
+let toastTimer;
+
+function showError(msg) {
+  toast.textContent = msg;
+  toast.style.display = "block";
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.style.display = "none", 4000);
+}
+
+async function api(path, opts = {}) {
+  const res = await fetch(API + path, {
+    headers: { "Content-Type": "application/json" },
+    ...opts,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `HTTP ${res.status}`);
+  }
+  if (res.status === 204) return null;
+  return res.json();
+}
+
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function renderTodo(t) {
+  const li = document.createElement("li");
+  li.className = "todo-item";
+  li.dataset.id = t.id;
+
+  const cb = document.createElement("input");
+  cb.type = "checkbox";
+  cb.checked = t.completed;
+  cb.addEventListener("change", () => toggleTodo(t.id, cb.checked));
+
+  const span = document.createElement("span");
+  span.className = "todo-text" + (t.completed ? " done" : "");
+  span.textContent = t.title;
+
+  const actions = document.createElement("div");
+  actions.className = "todo-actions";
+
+  const editBtn = document.createElement("button");
+  editBtn.className = "edit-btn";
+  editBtn.textContent = "Editar";
+  editBtn.addEventListener("click", () => editTodo(li, t, span));
+
+  const delBtn = document.createElement("button");
+  delBtn.className = "delete-btn";
+  delBtn.textContent = "Excluir";
+  delBtn.addEventListener("click", () => deleteTodo(t.id));
+
+  actions.append(editBtn, delBtn);
+  li.append(cb, span, actions);
+  return li;
+}
+
+async function loadTodos() {
+  try {
+    const todos = await api("/todos");
+    list.innerHTML = "";
+    if (todos.length === 0) {
+      list.innerHTML = '<li class="empty-msg">Nenhuma tarefa ainda. Crie uma!</li>';
+      return;
+    }
+    todos.forEach(t => list.appendChild(renderTodo(t)));
+  } catch (e) {
+    showError("Erro ao carregar tarefas: " + e.message);
+  }
+}
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const title = input.value.trim();
+  if (!title) return;
+  try {
+    await api("/todos", {
+      method: "POST",
+      body: JSON.stringify({ title }),
+    });
+    input.value = "";
+    input.focus();
+    await loadTodos();
+  } catch (e) {
+    showError("Erro ao criar tarefa: " + e.message);
+  }
+});
+
+async function toggleTodo(id, completed) {
+  try {
+    await api(`/todos/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ completed }),
+    });
+    await loadTodos();
+  } catch (e) {
+    showError("Erro ao atualizar: " + e.message);
+  }
+}
+
+async function deleteTodo(id) {
+  try {
+    await api(`/todos/${id}`, { method: "DELETE" });
+    await loadTodos();
+  } catch (e) {
+    showError("Erro ao excluir: " + e.message);
+  }
+}
+
+function editTodo(li, t, span) {
+  const input = document.createElement("input");
+  input.type = "text";
+  input.value = t.title;
+  input.className = "todo-text";
+  input.style.cssText = "flex:1;padding:.25rem .5rem;border:1px solid #d1d5db;border-radius:6px;font-size:inherit;";
+
+  const saveBtn = document.createElement("button");
+  saveBtn.textContent = "Salvar";
+  saveBtn.className = "edit-btn";
+  saveBtn.style.cssText = "background:#6366f1;color:#fff;border:none;border-radius:6px;padding:.25rem .75rem;cursor:pointer;";
+
+  const actions = li.querySelector(".todo-actions");
+  actions.innerHTML = "";
+  actions.appendChild(saveBtn);
+
+  const cb = li.querySelector('input[type="checkbox"]');
+  li.replaceChild(input, span);
+
+  const finish = () => {
+    li.replaceChild(span, input);
+    span.textContent = t.title;
+    actions.innerHTML = "";
+    const eb = document.createElement("button");
+    eb.className = "edit-btn"; eb.textContent = "Editar";
+    eb.addEventListener("click", () => editTodo(li, t, span));
+    const db = document.createElement("button");
+    db.className = "delete-btn"; db.textContent = "Excluir";
+    db.addEventListener("click", () => deleteTodo(t.id));
+    actions.append(eb, db);
+  };
+
+  saveBtn.addEventListener("click", async () => {
+    const val = input.value.trim();
+    if (!val) return;
+    try {
+      await api(`/todos/${t.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ title: val }),
+      });
+      t.title = val;
+      finish();
+      await loadTodos();
+    } catch (e) {
+      showError("Erro ao salvar: " + e.message);
+    }
+  });
+
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") saveBtn.click();
+    if (e.key === "Escape") finish();
+  });
+
+  input.focus();
+  input.select();
+}
+
+loadTodos();
+</script>
+</body>
+</html>
