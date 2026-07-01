@@ -1,9 +1,10 @@
 import os
+import socket
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from http import HTTPStatus
 
-from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi import FastAPI, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,13 +30,29 @@ app = FastAPI(
 
 INDEX_HTML = os.path.join(os.path.dirname(__file__), "..", "static", "index.html")
 
+HOSTNAME = socket.gethostname()
+
+
+@app.middleware("http")
+async def add_hostname_header(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Server-Hostname"] = HOSTNAME
+    return response
+
+
+@app.get("/hostname")
+async def get_hostname():
+    return {"hostname": HOSTNAME}
+
 
 @app.get("/")
 async def root():
     if os.path.isfile(INDEX_HTML):
-        return FileResponse(INDEX_HTML, media_type="text/html")
+        return FileResponse(INDEX_HTML, media_type="text/html",
+                            headers={"X-Server-Hostname": HOSTNAME})
     return {
         "app": os.environ.get("APP_NAME", "to-do-fastapi"),
+        "hostname": HOSTNAME,
         "status": "running",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
@@ -43,7 +60,7 @@ async def root():
 
 @app.get("/health")
 async def health():
-    return {"status": "healthy", "timestamp": datetime.now(timezone.utc).isoformat()}
+    return {"status": "healthy", "hostname": HOSTNAME, "timestamp": datetime.now(timezone.utc).isoformat()}
 
 
 @app.get("/db-status")

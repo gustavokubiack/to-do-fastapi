@@ -247,6 +247,16 @@ function editTodo(li, t, span) {
 }
 
 loadTodos();
+
+fetch("/hostname")
+  .then(r => r.json())
+  .then(data => {
+    const badge = document.createElement("div");
+    badge.style.cssText = "text-align:center;font-size:.75rem;color:#9ca3af;margin-top:1rem;padding:.5rem;border-top:1px solid #e5e7eb;";
+    badge.textContent = "Servidor: " + data.hostname;
+    document.querySelector(".container").appendChild(badge);
+  })
+  .catch(() => {});
 </script>
 </body>
 </html>
