@@ -16,12 +16,18 @@
     background: #fff; border-radius: 12px; padding: 1.5rem;
     box-shadow: 0 1px 3px rgba(0,0,0,.1); margin-bottom: 1rem;
   }
-  .todo-form { display: flex; gap: .5rem; }
+  .todo-form { display: flex; flex-wrap: wrap; gap: .5rem; }
   .todo-form input[type="text"] {
-    flex: 1; padding: .625rem .875rem; border: 1px solid #d1d5db;
+    flex: 1; min-width: 12rem; padding: .625rem .875rem; border: 1px solid #d1d5db;
     border-radius: 8px; font-size: .9375rem; outline: none;
   }
-  .todo-form input[type="text"]:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.15); }
+  .todo-form textarea {
+    flex-basis: 100%; padding: .625rem .875rem; border: 1px solid #d1d5db;
+    border-radius: 8px; font-size: .9375rem; outline: none; resize: vertical;
+    min-height: 2.5rem; font-family: inherit;
+  }
+  .todo-form input[type="text"]:focus,
+  .todo-form textarea:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.15); }
   .todo-form button {
     padding: .625rem 1.25rem; background: #6366f1; color: #fff;
     border: none; border-radius: 8px; font-size: .9375rem; cursor: pointer;
@@ -30,15 +36,22 @@
   .todo-form button:hover { background: #4f46e5; }
   .todo-list { list-style: none; }
   .todo-item {
-    display: flex; align-items: center; gap: .75rem;
+    display: flex; align-items: flex-start; gap: .75rem;
     padding: .75rem 0; border-bottom: 1px solid #f0f0f0;
   }
   .todo-item:last-child { border-bottom: none; }
   .todo-item input[type="checkbox"] {
     width: 1.125rem; height: 1.125rem; cursor: pointer; accent-color: #6366f1;
+    margin-top: .1875rem;
   }
-  .todo-item .todo-text { flex: 1; word-break: break-word; }
+  .todo-item .todo-main { flex: 1; min-width: 0; }
+  .todo-item .todo-text { display: block; word-break: break-word; }
   .todo-item .todo-text.done { text-decoration: line-through; color: #9ca3af; }
+  .todo-item .todo-desc {
+    display: block; word-break: break-word; font-size: .8125rem;
+    color: #6b7280; margin-top: .125rem; white-space: pre-wrap;
+  }
+  .todo-item .todo-desc.done { text-decoration: line-through; color: #c1c5cc; }
   .todo-item .todo-actions { display: flex; gap: .375rem; }
   .todo-actions button {
     background: none; border: 1px solid #d1d5db; border-radius: 6px;
@@ -61,6 +74,7 @@
   <div class="card">
     <form class="todo-form" id="todoForm">
       <input type="text" id="todoInput" placeholder="Nova tarefa..." required autofocus>
+      <textarea id="todoDescInput" placeholder="Descrição (opcional)..." rows="1"></textarea>
       <button type="submit">Adicionar</button>
     </form>
   </div>
@@ -75,6 +89,7 @@ const API = window.location.origin;
 const list = document.getElementById("todoList");
 const form = document.getElementById("todoForm");
 const input = document.getElementById("todoInput");
+const descInput = document.getElementById("todoDescInput");
 const toast = document.getElementById("errorToast");
 
 let toastTimer;
@@ -115,9 +130,20 @@ function renderTodo(t) {
   cb.checked = t.completed;
   cb.addEventListener("change", () => toggleTodo(t.id, cb.checked));
 
+  const main = document.createElement("div");
+  main.className = "todo-main";
+
   const span = document.createElement("span");
   span.className = "todo-text" + (t.completed ? " done" : "");
   span.textContent = t.title;
+  main.appendChild(span);
+
+  if (t.description) {
+    const descEl = document.createElement("span");
+    descEl.className = "todo-desc" + (t.completed ? " done" : "");
+    descEl.textContent = t.description;
+    main.appendChild(descEl);
+  }
 
   const actions = document.createElement("div");
   actions.className = "todo-actions";
@@ -125,7 +151,7 @@ function renderTodo(t) {
   const editBtn = document.createElement("button");
   editBtn.className = "edit-btn";
   editBtn.textContent = "Editar";
-  editBtn.addEventListener("click", () => editTodo(li, t, span));
+  editBtn.addEventListener("click", () => editTodo(li, t, main));
 
   const delBtn = document.createElement("button");
   delBtn.className = "delete-btn";
@@ -133,7 +159,7 @@ function renderTodo(t) {
   delBtn.addEventListener("click", () => deleteTodo(t.id));
 
   actions.append(editBtn, delBtn);
-  li.append(cb, span, actions);
+  li.append(cb, main, actions);
   return li;
 }
 
@@ -155,12 +181,14 @@ form.addEventListener("submit", async (e) => {
   e.preventDefault();
   const title = input.value.trim();
   if (!title) return;
+  const description = descInput.value.trim();
   try {
     await api("/todos", {
       method: "POST",
-      body: JSON.stringify({ title }),
+      body: JSON.stringify({ title, description: description || null }),
     });
     input.value = "";
+    descInput.value = "";
     input.focus();
     await loadTodos();
   } catch (e) {
@@ -189,12 +217,18 @@ async function deleteTodo(id) {
   }
 }
 
-function editTodo(li, t, span) {
-  const input = document.createElement("input");
-  input.type = "text";
-  input.value = t.title;
-  input.className = "todo-text";
-  input.style.cssText = "flex:1;padding:.25rem .5rem;border:1px solid #d1d5db;border-radius:6px;font-size:inherit;";
+function editTodo(li, t, main) {
+  const titleInput = document.createElement("input");
+  titleInput.type = "text";
+  titleInput.value = t.title;
+  titleInput.className = "todo-text";
+  titleInput.style.cssText = "display:block;width:100%;padding:.25rem .5rem;border:1px solid #d1d5db;border-radius:6px;font-size:inherit;";
+
+  const descInputEl = document.createElement("textarea");
+  descInputEl.value = t.description || "";
+  descInputEl.placeholder = "Descrição (opcional)...";
+  descInputEl.rows = 2;
+  descInputEl.style.cssText = "display:block;width:100%;margin-top:.375rem;padding:.25rem .5rem;border:1px solid #d1d5db;border-radius:6px;font-size:.8125rem;font-family:inherit;resize:vertical;";
 
   const saveBtn = document.createElement("button");
   saveBtn.textContent = "Salvar";
@@ -206,15 +240,25 @@ function editTodo(li, t, span) {
   actions.appendChild(saveBtn);
 
   const cb = li.querySelector('input[type="checkbox"]');
-  li.replaceChild(input, span);
+  main.innerHTML = "";
+  main.append(titleInput, descInputEl);
 
   const finish = () => {
-    li.replaceChild(span, input);
+    main.innerHTML = "";
+    const span = document.createElement("span");
+    span.className = "todo-text" + (t.completed ? " done" : "");
     span.textContent = t.title;
+    main.appendChild(span);
+    if (t.description) {
+      const descEl = document.createElement("span");
+      descEl.className = "todo-desc" + (t.completed ? " done" : "");
+      descEl.textContent = t.description;
+      main.appendChild(descEl);
+    }
     actions.innerHTML = "";
     const eb = document.createElement("button");
     eb.className = "edit-btn"; eb.textContent = "Editar";
-    eb.addEventListener("click", () => editTodo(li, t, span));
+    eb.addEventListener("click", () => editTodo(li, t, main));
     const db = document.createElement("button");
     db.className = "delete-btn"; db.textContent = "Excluir";
     db.addEventListener("click", () => deleteTodo(t.id));
@@ -222,14 +266,16 @@ function editTodo(li, t, span) {
   };
 
   saveBtn.addEventListener("click", async () => {
-    const val = input.value.trim();
+    const val = titleInput.value.trim();
     if (!val) return;
+    const descVal = descInputEl.value.trim();
     try {
       await api(`/todos/${t.id}`, {
         method: "PATCH",
-        body: JSON.stringify({ title: val }),
+        body: JSON.stringify({ title: val, description: descVal || null }),
       });
       t.title = val;
+      t.description = descVal || null;
       finish();
       await loadTodos();
     } catch (e) {
@@ -237,13 +283,13 @@ function editTodo(li, t, span) {
     }
   });
 
-  input.addEventListener("keydown", (e) => {
+  titleInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") saveBtn.click();
     if (e.key === "Escape") finish();
   });
 
-  input.focus();
-  input.select();
+  titleInput.focus();
+  titleInput.select();
 }
 
 loadTodos();
